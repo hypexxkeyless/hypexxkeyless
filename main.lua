@@ -1,145 +1,223 @@
--- // Load Rayfield UI //
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-	Name = "Emergency Hamburg | Keyless-Hypexx Menu",
-	LoadingTitle = "Keyless-Hypexx Menu loading...",
-	LoadingSubtitle = "Aimbot, ESP, Farm",
-	ConfigurationSaving = { Enabled = false },
-	KeySystem = false,
+    Name = "Keyless Free Menu",
+    LoadingTitle = "Keyless Free Menu Loading...",
+    LoadingSubtitle = "Hypexx Script",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false,
 })
 
--- // Services //
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
 
--- // Settings //
+-- Ayarlar
 local AimbotEnabled = false
-local ESPEnabled = false
-local BoxESPEnabled = false
-local TeamESPEnabled = false
+local FOVEnabled = false
+local TeamCheckEnabled = true
+local VisibleCheckEnabled = true
 
-local FOVRadius = 100
-local MaxAimbotDistance = 300
-local AimbotPart = "HumanoidRootPart"
-local AimbotTeamCheck = true
-local FOVColor = Color3.fromRGB(255, 0, 0)
+local AimPart = "HumanoidRootPart"
+local PredictionLevel = 5
+local MaxDistance = 300
+
+-- ESP ayarları
+local ESPEnabled = false
+local ESPTeamEnabled = false
+local ESPDistanceEnabled = false
+local ESPBoxEnabled = false
+local ESPDisplayNameEnabled = false
+local ESPUsernameEnabled = false
 
 local TeamColors = {
-	["Prisoners"] = Color3.fromRGB(0, 0, 0),
-	["Polizei"] = Color3.fromRGB(0, 150, 255),
-	["Criminals"] = Color3.fromRGB(255, 0, 0),
-	["Fire"] = Color3.fromRGB(255, 120, 0),
-	["Trucker"] = Color3.fromRGB(0, 255, 0),
-	["Bus"] = Color3.fromRGB(0, 255, 0),
-	["Citizen"] = Color3.fromRGB(255, 255, 255)
+    ["Prison"] = Color3.fromRGB(30,30,30),       -- Hapistekiler siyah
+    ["Polizei"] = Color3.fromRGB(0,150,255),     -- Polisler mavi
+    ["Criminal"] = Color3.fromRGB(255,0,0),      -- Suçlular kırmızı
+    ["Fire"] = Color3.fromRGB(255,120,0),        -- İtfaiye turuncu
+    ["BusDriver"] = Color3.fromRGB(0,255,0),     -- Otobüs yeşil (isteğe göre)
+    ["TruckDriver"] = Color3.fromRGB(0,255,0),   -- Tırcılar yeşil (aynı yeşil)
+    ["Citizen"] = Color3.fromRGB(255,255,255),   -- Normal beyaz
 }
 
--- // FOV Circle //
-local fovCircle = Drawing.new("Circle")
-fovCircle.Visible = true
-fovCircle.Radius = FOVRadius
-fovCircle.Color = FOVColor
-fovCircle.Thickness = 1
-fovCircle.Filled = false
+-- Yazı tipi için custom font ekleyebilirsen ekle, yoksa default bırakıyoruz
+local HypexxFont = Enum.Font.GothamBold -- Rayfield default içinde yoksa değiştirilebilir
 
-RunService.RenderStepped:Connect(function()
-	local mousePos = Vector2.new(Mouse.X, Mouse.Y)
-	fovCircle.Position = mousePos
-end)
+-- FOV ayarları
+local FOVRadius = 100
+local FOVColor = Color3.fromRGB(0, 150, 255)
 
--- // Aimbot Logic //
-local function GetClosestPlayer()
-	local closest = nil
-	local shortest = math.huge
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(AimbotPart) and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 25 then
-			if not AimbotTeamCheck or (player.Team ~= LocalPlayer.Team) then
-				local partPos, onScreen = Camera:WorldToViewportPoint(player.Character[AimbotPart].Position)
-				local dist = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(partPos.X, partPos.Y)).Magnitude
-				local dist3d = (LocalPlayer.Character.HumanoidRootPart.Position - player.Character[AimbotPart].Position).Magnitude
-				if onScreen and dist < FOVRadius and dist < shortest and dist3d <= MaxAimbotDistance then
-					shortest = dist
-					closest = player
-				end
-			end
-		end
-	end
-	return closest
+-- FOV Çizimi
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Visible = false
+FOVCircle.Color = FOVColor
+FOVCircle.Thickness = 2
+FOVCircle.NumSides = 100
+FOVCircle.Radius = FOVRadius
+FOVCircle.Filled = false
+FOVCircle.Position = Vector2.new(workspace.CurrentCamera.ViewportSize.X / 2, workspace.CurrentCamera.ViewportSize.Y / 2)
+
+-- Aimbot Fonksiyonu
+local function IsVisible(target)
+    if not VisibleCheckEnabled then return true end
+    local origin = Camera.CFrame.Position
+    local direction = (target.Position - origin).Unit * (target.Position - origin).Magnitude
+    local ray = Ray.new(origin, direction)
+    local hit, pos = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character, target.Parent})
+    if hit and (pos - target.Position).Magnitude > 1 then
+        return false
+    end
+    return true
 end
 
-RunService.RenderStepped:Connect(function()
-	if AimbotEnabled then
-		local target = GetClosestPlayer()
-		if target and target.Character and target.Character:FindFirstChild(AimbotPart) then
-			Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character[AimbotPart].Position)
-		end
-	end
-end)
+local function GetClosestTarget()
+    local bestTarget = nil
+    local bestDist = math.huge
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
--- // ESP //
-local function CreateESP(player)
-	if player.Character and not player.Character:FindFirstChild("HypexxESP") and player.Character:FindFirstChild("Head") then
-		local esp = Instance.new("BillboardGui", player.Character)
-		esp.Name = "HypexxESP"
-		esp.AlwaysOnTop = true
-		esp.Size = UDim2.new(0, 200, 0, 100)
-		esp.StudsOffset = Vector3.new(0, 3, 0)
-		esp.Adornee = player.Character.Head
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(AimPart) and player.Character:FindFirstChild("Humanoid") then
+            local humanoid = player.Character.Humanoid
+            if humanoid.Health > 25 then -- Sağlık kontrolü
+                if TeamCheckEnabled then
+                    local myTeam = LocalPlayer.Team and LocalPlayer.Team.Name or ""
+                    local targetTeam = player.Team and player.Team.Name or ""
+                    if myTeam == targetTeam then
+                        goto continue
+                    end
+                end
 
-		local function createLabel(name, text, y)
-			local label = Instance.new("TextLabel", esp)
-			label.Name = name
-			label.BackgroundTransparency = 1
-			label.Size = UDim2.new(1, 0, 0, 18)
-			label.Position = UDim2.new(0, 0, 0, y)
-			label.Text = text
-			label.TextScaled = true
-			label.Font = Enum.Font.GothamBold
-			label.TextStrokeTransparency = 0.5
-			label.TextColor3 = TeamColors[player.Team and player.Team.Name] or Color3.new(1, 1, 1)
-			return label
-		end
+                if humanoid.Health <= 0 then goto continue end -- Ölü kontrolü
 
-		createLabel("Username", "User: "..player.Name, 0)
-		createLabel("Display", "Display: "..player.DisplayName, 18)
-		if TeamESPEnabled then
-			createLabel("Team", "Team: "..(player.Team and player.Team.Name or "Unknown"), 36)
-		end
-		createLabel("Distance", "", 54)
-	end
+                local pos = player.Character[AimPart].Position
+                if not IsVisible(player.Character[AimPart].Position) then goto continue end
+
+                local screenPos, onScreen = Camera:WorldToViewportPoint(pos)
+                if onScreen then
+                    local dist2d = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                    local dist3d = (LocalPlayer.Character.HumanoidRootPart.Position - pos).Magnitude
+                    if dist2d < FOVRadius and dist3d <= MaxDistance then
+                        if dist2d < bestDist then
+                            bestDist = dist2d
+                            bestTarget = player
+                        end
+                    end
+                end
+            end
+        end
+        ::continue::
+    end
+    return bestTarget
 end
 
+-- Aimbot aktifken her frame
 RunService.RenderStepped:Connect(function()
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and ESPEnabled then
-			CreateESP(player)
-			local esp = player.Character and player.Character:FindFirstChild("HypexxESP")
-			if esp and player.Character:FindFirstChild("HumanoidRootPart") then
-				local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude)
-				local distanceLabel = esp:FindFirstChild("Distance")
-				if distanceLabel then
-					distanceLabel.Text = "Distance: "..dist.."m"
-				end
-			end
-		elseif player.Character and player.Character:FindFirstChild("HypexxESP") then
-			player.Character:FindFirstChild("HypexxESP"):Destroy()
-		end
-	end
+    -- FOV pozisyonu güncellemesi (sabit ortada)
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    FOVCircle.Visible = FOVEnabled
+
+    if AimbotEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local target = GetClosestTarget()
+        if target and target.Character and target.Character:FindFirstChild(AimPart) then
+            local part = target.Character[AimPart]
+            local predictPos = part.Position + part.Velocity * (0.03 * PredictionLevel)
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, predictPos)
+        end
+    end
 end)
 
--- // Rayfield UI Controls //
-local tab = Window:CreateTab("🎯 Aimbot / ESP")
+-- ESP Yönetimi
+local ESPFolder = Instance.new("Folder", workspace)
+ESPFolder.Name = "HypexxESP"
 
-tab:CreateToggle({ Name = "Enable Aimbot", CurrentValue = false, Callback = function(v) AimbotEnabled = v end })
-tab:CreateSlider({ Name = "FOV Radius", Range = {50, 500}, Increment = 10, CurrentValue = FOVRadius, Callback = function(v) FOVRadius = v; fovCircle.Radius = v end })
-tab:CreateColorPicker({ Name = "FOV Color", Color = FOVColor, Callback = function(c) FOVColor = c; fovCircle.Color = c end })
-tab:CreateDropdown({ Name = "Aim Part", Options = {"Head", "HumanoidRootPart"}, Callback = function(v) AimbotPart = v end })
-tab:CreateToggle({ Name = "Team Check", CurrentValue = AimbotTeamCheck, Callback = function(v) AimbotTeamCheck = v end })
+local function RemoveESP()
+    for _, v in pairs(ESPFolder:GetChildren()) do
+        v:Destroy()
+    end
+end
 
-tab:CreateSection("ESP Settings")
-tab:CreateToggle({ Name = "Enable ESP", CurrentValue = false, Callback = function(v) ESPEnabled = v end })
-tab:CreateToggle({ Name = "Team ESP", CurrentValue = true, Callback = function(v) TeamESPEnabled = v end })
+local function CreateESPForPlayer(player)
+    if not player.Character or not player.Character:FindFirstChild("Head") then return end
+    if ESPFolder:FindFirstChild(player.Name) then return end
+
+    local espBox = Drawing.new("Square")
+    espBox.Visible = false
+    espBox.Color = Color3.new(1,1,1)
+    espBox.Thickness = 2
+    espBox.Transparency = 1
+    espBox.Filled = false
+
+    local espText = Drawing.new("Text")
+    espText.Visible = false
+    espText.Color = Color3.new(1,1,1)
+    espText.Size = 16
+    espText.Center = true
+    espText.Outline = true
+    espText.Font = 2 -- Custom font yoksa 2 (UI)
+
+    local espDistanceText = Drawing.new("Text")
+    espDistanceText.Visible = false
+    espDistanceText.Color = Color3.new(1,1,1)
+    espDistanceText.Size = 14
+    espDistanceText.Center = true
+    espDistanceText.Outline = true
+    espDistanceText.Font = 2
+
+    ESPFolder.ChildAdded:Connect(function(child)
+        if child.Name == player.Name then
+            -- eklendiğinde gerekli güncellemeleri yapabiliriz
+        end
+    end)
+
+    -- Güncelleme fonksiyonu
+    RunService.RenderStepped:Connect(function()
+        if not ESPEnabled then
+            espBox.Visible = false
+            espText.Visible = false
+            espDistanceText.Visible = false
+            return
+        end
+
+        if player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("HumanoidRootPart") then
+            local headPos, onScreenHead = Camera:WorldToViewportPoint(player.Character.Head.Position)
+            local rootPos, onScreenRoot = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
+            if onScreenHead and onScreenRoot then
+                -- Box çizimi
+                if ESPBoxEnabled then
+                    local size = math.abs(headPos.Y - rootPos.Y)
+                    espBox.Size = Vector2.new(size * 0.6, size)
+                    espBox.Position = Vector2.new(headPos.X - espBox.Size.X / 2, headPos.Y - espBox.Size.Y / 2)
+                    espBox.Color = TeamColors[player.Team and player.Team.Name or "Citizen"] or Color3.new(1,1,1)
+                    espBox.Visible = true
+                else
+                    espBox.Visible = false
+                end
+
+                -- Username ve Display Name gösterimi
+                if ESPDisplayNameEnabled or ESPUsernameEnabled or ESPTeamEnabled or ESPDistanceEnabled then
+                    local texts = {}
+
+                    if ESPDisplayNameEnabled then
+                        table.insert(texts, player.DisplayName)
+                    end
+                    if ESPUsernameEnabled then
+                        table.insert(texts, "User: "..player.Name)
+                    end
+                    if ESPTeamEnabled then
+                        local teamName = player.Team and player.Team.Name or "Citizen"
+                        table.insert(texts, "Team: "..teamName)
+                    end
+                    if ESPDistanceEnabled then
+                        local dist = (LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+                        table.insert(texts, string.format("Distance: %.0fm", dist))
+                    end
+
+                    local fullText = table.concat(texts, " | ")
+                    espText.Text = fullText
+                    espText.Size = 16
+                    espText.Position = Vector2.new(headPos.X, headPos.Y - 20)
+                    espText.Color = TeamColors[player.Team and player.Team.Name or "Citizen"] or Color3.new(1,1,1)
+                    espText.Visible = true
+                else
+                    espText.Visible = false
