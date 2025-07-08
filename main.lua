@@ -1,223 +1,206 @@
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-local Window = Rayfield:CreateWindow({
-    Name = "Keyless Free Menu",
-    LoadingTitle = "Keyless Free Menu Loading...",
-    LoadingSubtitle = "Hypexx Script",
-    ConfigurationSaving = { Enabled = false },
-    KeySystem = false,
-})
-
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local RunService = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
-local Camera = workspace.CurrentCamera
-
--- Ayarlar
-local AimbotEnabled = false
-local FOVEnabled = false
-local TeamCheckEnabled = true
-local VisibleCheckEnabled = true
-
-local AimPart = "HumanoidRootPart"
-local PredictionLevel = 5
-local MaxDistance = 300
-
--- ESP ayarları
-local ESPEnabled = false
-local ESPTeamEnabled = false
-local ESPDistanceEnabled = false
-local ESPBoxEnabled = false
-local ESPDisplayNameEnabled = false
-local ESPUsernameEnabled = false
-
-local TeamColors = {
-    ["Prison"] = Color3.fromRGB(30,30,30),       -- Hapistekiler siyah
-    ["Polizei"] = Color3.fromRGB(0,150,255),     -- Polisler mavi
-    ["Criminal"] = Color3.fromRGB(255,0,0),      -- Suçlular kırmızı
-    ["Fire"] = Color3.fromRGB(255,120,0),        -- İtfaiye turuncu
-    ["BusDriver"] = Color3.fromRGB(0,255,0),     -- Otobüs yeşil (isteğe göre)
-    ["TruckDriver"] = Color3.fromRGB(0,255,0),   -- Tırcılar yeşil (aynı yeşil)
-    ["Citizen"] = Color3.fromRGB(255,255,255),   -- Normal beyaz
-}
-
--- Yazı tipi için custom font ekleyebilirsen ekle, yoksa default bırakıyoruz
-local HypexxFont = Enum.Font.GothamBold -- Rayfield default içinde yoksa değiştirilebilir
-
--- FOV ayarları
-local FOVRadius = 100
-local FOVColor = Color3.fromRGB(0, 150, 255)
-
--- FOV Çizimi
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Visible = false
-FOVCircle.Color = FOVColor
-FOVCircle.Thickness = 2
-FOVCircle.NumSides = 100
-FOVCircle.Radius = FOVRadius
-FOVCircle.Filled = false
-FOVCircle.Position = Vector2.new(workspace.CurrentCamera.ViewportSize.X / 2, workspace.CurrentCamera.ViewportSize.Y / 2)
-
--- Aimbot Fonksiyonu
-local function IsVisible(target)
-    if not VisibleCheckEnabled then return true end
-    local origin = Camera.CFrame.Position
-    local direction = (target.Position - origin).Unit * (target.Position - origin).Magnitude
-    local ray = Ray.new(origin, direction)
-    local hit, pos = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character, target.Parent})
-    if hit and (pos - target.Position).Magnitude > 1 then
-        return false
-    end
-    return true
+--// Rayfield UI Yükle
+local success, Rayfield = pcall(loadstring, game:HttpGet("https://sirius.menu/rayfield"))
+if not success then
+    warn("[Hypexx] Rayfield could not be loaded.")
+    return
 end
 
-local function GetClosestTarget()
-    local bestTarget = nil
-    local bestDist = math.huge
-    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+Rayfield = Rayfield()
+
+--// Servisler ve Oyuncu
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+--// Aimbot Ayarları
+local AimbotEnabled = false
+local TeamCheck = true
+local SelectedTeam = "All"
+local SelectedPart = "Head"
+local VisibleCheck = true
+local Prediction = 5
+local AimbotDistance = 500
+
+--// FOV Ayarları
+local ShowFOV = true
+local FOVRadius = 100
+local FOVColor = Color3.fromRGB(255, 255, 255)
+
+--// FOV Çizimi
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Radius = FOVRadius
+FOVCircle.Filled = false
+FOVCircle.Thickness = 2
+FOVCircle.Transparency = 1
+FOVCircle.Color = FOVColor
+FOVCircle.Visible = ShowFOV
+
+RunService.RenderStepped:Connect(function()
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    FOVCircle.Radius = FOVRadius
+    FOVCircle.Color = FOVColor
+    FOVCircle.Visible = ShowFOV
+end)
+
+--// Görünürlük Kontrolü
+local function IsVisible(targetPart)
+    if not VisibleCheck then return true end
+    local rayParams = RaycastParams.new()
+    rayParams.FilterDescendantsInstances = {LocalPlayer.Character, targetPart.Parent}
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    rayParams.IgnoreWater = true
+
+    local origin = Camera.CFrame.Position
+    local direction = (targetPart.Position - origin).Unit * 1000
+    local result = workspace:Raycast(origin, direction, rayParams)
+
+    return result and result.Instance:IsDescendantOf(targetPart.Parent)
+end
+
+--// En Yakın Oyuncu
+local function GetClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = AimbotDistance
 
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(AimPart) and player.Character:FindFirstChild("Humanoid") then
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") then
             local humanoid = player.Character.Humanoid
-            if humanoid.Health > 25 then -- Sağlık kontrolü
-                if TeamCheckEnabled then
-                    local myTeam = LocalPlayer.Team and LocalPlayer.Team.Name or ""
-                    local targetTeam = player.Team and player.Team.Name or ""
-                    if myTeam == targetTeam then
-                        goto continue
-                    end
-                end
+            if humanoid.Health > 25 then
+                local part = player.Character:FindFirstChild(SelectedPart)
+                if part then
+                    if not (TeamCheck and player.Team == LocalPlayer.Team) then
+                        if SelectedTeam == "All" or player.Team.Name == SelectedTeam then
+                            local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                            local mousePos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                            local distFromCenter = (mousePos - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+                            local distance = (Camera.CFrame.Position - part.Position).Magnitude
 
-                if humanoid.Health <= 0 then goto continue end -- Ölü kontrolü
-
-                local pos = player.Character[AimPart].Position
-                if not IsVisible(player.Character[AimPart].Position) then goto continue end
-
-                local screenPos, onScreen = Camera:WorldToViewportPoint(pos)
-                if onScreen then
-                    local dist2d = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
-                    local dist3d = (LocalPlayer.Character.HumanoidRootPart.Position - pos).Magnitude
-                    if dist2d < FOVRadius and dist3d <= MaxDistance then
-                        if dist2d < bestDist then
-                            bestDist = dist2d
-                            bestTarget = player
+                            if distance < shortestDistance and distFromCenter <= FOVRadius and IsVisible(part) then
+                                shortestDistance = distance
+                                closestPlayer = player
+                            end
                         end
                     end
                 end
             end
         end
-        ::continue::
     end
-    return bestTarget
+
+    return closestPlayer
 end
 
--- Aimbot aktifken her frame
+--// Aimbot Aktifse Çalıştır
 RunService.RenderStepped:Connect(function()
-    -- FOV pozisyonu güncellemesi (sabit ortada)
-    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    FOVCircle.Visible = FOVEnabled
+    if not AimbotEnabled then return end
 
-    if AimbotEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local target = GetClosestTarget()
-        if target and target.Character and target.Character:FindFirstChild(AimPart) then
-            local part = target.Character[AimPart]
-            local predictPos = part.Position + part.Velocity * (0.03 * PredictionLevel)
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, predictPos)
-        end
+    local target = GetClosestPlayer()
+    if target and target.Character and target.Character:FindFirstChild(SelectedPart) then
+        local part = target.Character[SelectedPart]
+        local predictedPosition = part.Position + (part.Velocity * (Prediction / 10))
+        Camera.CFrame = CFrame.new(Camera.CFrame.Position, predictedPosition)
     end
 end)
 
--- ESP Yönetimi
-local ESPFolder = Instance.new("Folder", workspace)
-ESPFolder.Name = "HypexxESP"
+--// Rayfield UI Oluştur
+local Window = Rayfield:CreateWindow({
+    Name = "Hypexx Keyless Menu",
+    LoadingTitle = "Hypexx Keyless Menu loading...",
+    LoadingSubtitle = "Powered by Hypexx",
+    ConfigurationSaving = {
+        Enabled = false
+    },
+    KeySystem = false
+})
 
-local function RemoveESP()
-    for _, v in pairs(ESPFolder:GetChildren()) do
-        v:Destroy()
+local AimbotTab = Window:CreateTab("Aimbot", 4483362458)
+
+-- Aimbot Seçenekleri
+AimbotTab:CreateToggle({
+    Name = "Enable Aimbot",
+    CurrentValue = false,
+    Callback = function(Value)
+        AimbotEnabled = Value
     end
-end
+})
 
-local function CreateESPForPlayer(player)
-    if not player.Character or not player.Character:FindFirstChild("Head") then return end
-    if ESPFolder:FindFirstChild(player.Name) then return end
+AimbotTab:CreateToggle({
+    Name = "Team Check (Ignore Same Team)",
+    CurrentValue = true,
+    Callback = function(Value)
+        TeamCheck = Value
+    end
+})
 
-    local espBox = Drawing.new("Square")
-    espBox.Visible = false
-    espBox.Color = Color3.new(1,1,1)
-    espBox.Thickness = 2
-    espBox.Transparency = 1
-    espBox.Filled = false
+AimbotTab:CreateDropdown({
+    Name = "Target Team",
+    Options = {"All", "Police", "Criminals", "Citizens", "Fire Department"},
+    CurrentOption = "All",
+    Callback = function(Value)
+        SelectedTeam = Value
+    end
+})
 
-    local espText = Drawing.new("Text")
-    espText.Visible = false
-    espText.Color = Color3.new(1,1,1)
-    espText.Size = 16
-    espText.Center = true
-    espText.Outline = true
-    espText.Font = 2 -- Custom font yoksa 2 (UI)
+AimbotTab:CreateDropdown({
+    Name = "Target Part",
+    Options = {"Head", "HumanoidRootPart"},
+    CurrentOption = "Head",
+    Callback = function(Value)
+        SelectedPart = Value
+    end
+})
 
-    local espDistanceText = Drawing.new("Text")
-    espDistanceText.Visible = false
-    espDistanceText.Color = Color3.new(1,1,1)
-    espDistanceText.Size = 14
-    espDistanceText.Center = true
-    espDistanceText.Outline = true
-    espDistanceText.Font = 2
+AimbotTab:CreateToggle({
+    Name = "Visible Check (Wall Check)",
+    CurrentValue = true,
+    Callback = function(Value)
+        VisibleCheck = Value
+    end
+})
 
-    ESPFolder.ChildAdded:Connect(function(child)
-        if child.Name == player.Name then
-            -- eklendiğinde gerekli güncellemeleri yapabiliriz
-        end
-    end)
+AimbotTab:CreateSlider({
+    Name = "Prediction Accuracy",
+    Range = {1, 10},
+    Increment = 1,
+    CurrentValue = 5,
+    Callback = function(Value)
+        Prediction = Value
+    end
+})
 
-    -- Güncelleme fonksiyonu
-    RunService.RenderStepped:Connect(function()
-        if not ESPEnabled then
-            espBox.Visible = false
-            espText.Visible = false
-            espDistanceText.Visible = false
-            return
-        end
+AimbotTab:CreateSlider({
+    Name = "Max Aimbot Distance",
+    Range = {50, 500},
+    Increment = 10,
+    CurrentValue = 500,
+    Callback = function(Value)
+        AimbotDistance = Value
+    end
+})
 
-        if player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("HumanoidRootPart") then
-            local headPos, onScreenHead = Camera:WorldToViewportPoint(player.Character.Head.Position)
-            local rootPos, onScreenRoot = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
-            if onScreenHead and onScreenRoot then
-                -- Box çizimi
-                if ESPBoxEnabled then
-                    local size = math.abs(headPos.Y - rootPos.Y)
-                    espBox.Size = Vector2.new(size * 0.6, size)
-                    espBox.Position = Vector2.new(headPos.X - espBox.Size.X / 2, headPos.Y - espBox.Size.Y / 2)
-                    espBox.Color = TeamColors[player.Team and player.Team.Name or "Citizen"] or Color3.new(1,1,1)
-                    espBox.Visible = true
-                else
-                    espBox.Visible = false
-                end
+AimbotTab:CreateToggle({
+    Name = "Show FOV Circle",
+    CurrentValue = true,
+    Callback = function(Value)
+        ShowFOV = Value
+        FOVCircle.Visible = ShowFOV
+    end
+})
 
-                -- Username ve Display Name gösterimi
-                if ESPDisplayNameEnabled or ESPUsernameEnabled or ESPTeamEnabled or ESPDistanceEnabled then
-                    local texts = {}
+AimbotTab:CreateSlider({
+    Name = "FOV Radius",
+    Range = {10, 300},
+    Increment = 5,
+    CurrentValue = 100,
+    Callback = function(Value)
+        FOVRadius = Value
+    end
+})
 
-                    if ESPDisplayNameEnabled then
-                        table.insert(texts, player.DisplayName)
-                    end
-                    if ESPUsernameEnabled then
-                        table.insert(texts, "User: "..player.Name)
-                    end
-                    if ESPTeamEnabled then
-                        local teamName = player.Team and player.Team.Name or "Citizen"
-                        table.insert(texts, "Team: "..teamName)
-                    end
-                    if ESPDistanceEnabled then
-                        local dist = (LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
-                        table.insert(texts, string.format("Distance: %.0fm", dist))
-                    end
-
-                    local fullText = table.concat(texts, " | ")
-                    espText.Text = fullText
-                    espText.Size = 16
-                    espText.Position = Vector2.new(headPos.X, headPos.Y - 20)
-                    espText.Color = TeamColors[player.Team and player.Team.Name or "Citizen"] or Color3.new(1,1,1)
-                    espText.Visible = true
-                else
-                    espText.Visible = false
+AimbotTab:CreateColorPicker({
+    Name = "FOV Circle Color",
+    Color = Color3.fromRGB(255, 255, 255),
+    Callback = function(Value)
+        FOVColor = Value
+    end
+})
