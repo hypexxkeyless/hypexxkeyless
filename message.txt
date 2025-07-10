@@ -4,7 +4,172 @@
 
 local function print() end
 local function warn() end
+-- Hypexx Keyless Menu - Sirius Rayfield UI
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
+local Window = Rayfield:CreateWindow({
+	Name = "Hypexx-Keyless Menu",
+	LoadingTitle = "Hypexx Loader",
+	LoadingSubtitle = "No Key • Free Access",
+	ConfigurationSaving = {
+		Enabled = true,
+		FolderName = "Hypexx", -- Config klasörü
+		FileName = "KeylessSettings"
+	},
+	KeySystem = false
+})
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+
+-- Vars
+local noclipEnabled = false
+local walkspeedBoost = 0
+local noclipConnection
+
+-- 📌 Home Tab
+local Home = Window:CreateTab("Home", 4483345998)
+Home:CreateParagraph({Title = "Welcome to Hypexx Menu", Content = "Free Roblox Enhancer by Hypexx"})
+
+Home:CreateButton({
+	Name = "Copy Discord",
+	Callback = function()
+		setclipboard("https://discord.gg/yourserverlink")
+	end
+})
+
+Home:CreateButton({
+	Name = "Copy YouTube",
+	Callback = function()
+		setclipboard("https://youtube.com/@yourchannel")
+	end
+})
+
+-- 🧍 Player Settings Tab
+local PlayerTab = Window:CreateTab("Player Settings", 4483345998)
+
+-- Reset
+PlayerTab:CreateButton({
+	Name = "Reset Character",
+	Callback = function()
+		local hum = Player.Character and Player.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum.Health = 0 end
+	end
+})
+
+-- Noclip
+PlayerTab:CreateToggle({
+	Name = "Noclip",
+	CurrentValue = false,
+	Callback = function(Value)
+		noclipEnabled = Value
+		if noclipEnabled then
+			noclipConnection = RunService.Stepped:Connect(function()
+				local char = Player.Character
+				if char then
+					for _, part in pairs(char:GetDescendants()) do
+						if part:IsA("BasePart") then
+							part.CanCollide = false
+						end
+					end
+				end
+			end)
+		else
+			if noclipConnection then noclipConnection:Disconnect() end
+		end
+	end
+})
+
+-- Walkspeed Boost
+PlayerTab:CreateSlider({
+	Name = "Walkspeed Boost",
+	Range = {0, 80},
+	Increment = 1,
+	Suffix = "Speed",
+	CurrentValue = 0,
+	Callback = function(Value)
+		walkspeedBoost = Value / 30
+	end
+})
+
+RunService.Heartbeat:Connect(function()
+	local char = Player.Character
+	if char and walkspeedBoost > 0 then
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if hum and root and hum.MoveDirection.Magnitude > 0 then
+			root.CFrame = root.CFrame + root.CFrame.LookVector * walkspeedBoost
+		end
+	end
+end)
+
+-- Anti-Death
+PlayerTab:CreateToggle({
+	Name = "Anti-Death (Freeze Health)",
+	CurrentValue = false,
+	Callback = function(Value)
+		if Value then
+			getfenv().antideath = Player.Character:FindFirstChildOfClass("Humanoid").HealthChanged:Connect(function()
+				Player.Character:FindFirstChildOfClass("Humanoid").Health = 100
+			end)
+		else
+			if getfenv().antideath then
+				getfenv().antideath:Disconnect()
+				getfenv().antideath = nil
+			end
+		end
+	end
+})
+
+-- Anti-Fall
+PlayerTab:CreateToggle({
+	Name = "Anti-Fall",
+	CurrentValue = false,
+	Callback = function(Value)
+		if Value then
+			getfenv().nofall = RunService.RenderStepped:Connect(function()
+				local root = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+				if root and root.Velocity.Y < -50 then
+					root.Velocity = Vector3.zero
+				end
+			end)
+		else
+			if getfenv().nofall then
+				getfenv().nofall:Disconnect()
+				getfenv().nofall = nil
+			end
+		end
+	end
+})
+
+-- Max Zoom
+PlayerTab:CreateSlider({
+	Name = "Camera Max Zoom",
+	Range = {20, 1000},
+	Increment = 10,
+	Suffix = "Zoom",
+	CurrentValue = 20,
+	Callback = function(Value)
+		Player.CameraMaxZoomDistance = Value
+	end
+})
+
+-- Infinite Stamina (experimental)
+PlayerTab:CreateButton({
+	Name = "Infinite Stamina",
+	Callback = function()
+		for _, f in pairs(getgc(true)) do
+			if typeof(f) == "function" and debug.getinfo(f).name == "setStamina" then
+				hookfunction(f, function(self, stamina)
+					return self, math.huge
+				end)
+				break
+			end
+		end
+	end
+})
 --// ===================================================
 --// REMOTE EVENT DECLARATIONS
 --// ===================================================
@@ -31,9 +196,7 @@ local TaserShootRemote = game:GetService("ReplicatedStorage")["ZDD"]["8b8ec986-2
 -- UI INITIALIZATION
 -- ===================================================
 
-local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/Kanistay/Storage/refs/heads/main/readme')))()
-
-local Window = OrionLib:MakeWindow({Name = "Kanistay Hub │ Emergency Hamburg ", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})
+local Window = OrionLib:MakeWindow({Name = "HypexxHub │ Keyless Menu ", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})
 
 local Tab = Window:MakeTab({
     Name = "│Home",
@@ -41,15 +204,15 @@ local Tab = Window:MakeTab({
     PremiumOnly = false
 })
 
-Tab:AddParagraph("© 2025 Kanistay Scripting", "")
+Tab:AddParagraph("© 2025 Hypexx Scripting", "")
 Tab:AddParagraph("Discord-->https://discord.gg/HuQCQcPTKK", "")
 
 Tab:AddButton({
     Name = "Copying Discord Link",
     Callback = function()
-        setclipboard("https://discord.gg/HuQCQcPTKK")
+        setclipboard("hypexxkeyless")
         OrionLib:MakeNotification({
-	Name = "Discord",
+	Name = "script name",
 	Content = "Link Copied",
 	Image = "rbxassetid://4483345998",
 	Time = 5
@@ -58,12 +221,12 @@ Tab:AddButton({
     end    
 })
 
-Tab:AddParagraph("YouTube-->https://www.youtube.com/@Kanistay", "")
+Tab:AddParagraph("YouTube-->hypexx", "")
 
 Tab:AddButton({
     Name = "Copying YouTube Link",
     Callback = function()
-        setclipboard("https://www.youtube.com/@Kanistay")
+        setclipboard("hypexx")
         OrionLib:MakeNotification({
 	Name = "YouTube",
 	Content = "Link Copied",
